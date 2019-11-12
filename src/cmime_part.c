@@ -351,6 +351,10 @@ int cmime_part_to_file(CMimePart_T *part, char *filename) {
     // check for encodings
     encoding = cmime_part_get_content_transfer_encoding(part);
     
+    //remove head and tail space
+    if (encoding != NULL) {
+        encoding = cmime_string_strip(encoding);
+    }
     if(encoding == NULL) {
         asprintf(&decoded_str,"%s",part->content);
     } else if (strcmp(encoding,qp)==0) {
@@ -371,8 +375,12 @@ int cmime_part_to_file(CMimePart_T *part, char *filename) {
     }
 
     // some cleanup
+    //encoding should not be released, because it is allocated at 
+    //set_header_value and should be released by cmime_header
+    /**
     if(encoding!=NULL)
         free(encoding);
+     */
     if(decoded_str!=NULL)
         free(decoded_str);
 
