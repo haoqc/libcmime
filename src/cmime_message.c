@@ -157,6 +157,10 @@ _StrippedData_T *_strip_message(CMimeMessage_T **msg, char *buffer, int header_o
 
     /* search newline and build header-body seperator */
     newline_char = _cmime_internal_determine_linebreak(buffer);
+    if (newline_char == NULL)
+    {
+        return (sd);
+    }
     (*msg)->linebreak = strdup(newline_char);
     asprintf(&empty_line,"%s%s",newline_char,newline_char);
 
@@ -982,6 +986,11 @@ int cmime_message_from_string(CMimeMessage_T **message, const char *content, int
   
     p = strdup(content);
     sd = _strip_message(message,p,header_only);
+    if (sd == NULL)
+    {
+        free(p);
+        return (-1);
+    }
     
     ret = cmime_scanner_scan_buffer(message, sd->stripped);
 

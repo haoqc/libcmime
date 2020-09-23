@@ -24,7 +24,8 @@ set(LIBCMIME_SRC
 	${FLEX_cmime_scanner_OUTPUTS}
 )
 
-add_library(cmime SHARED ${LIBCMIME_SRC})
+#add_library(cmime SHARED ${LIBCMIME_SRC})
+add_library(cmime STATIC ${LIBCMIME_SRC})
 target_link_libraries(cmime ${FLEX_LIBRARIES})
 set_property(TARGET cmime PROPERTY PUBLIC_HEADER cmime.h )
 set_property(TARGET cmime PROPERTY PRIVATE_HEADER
@@ -45,6 +46,7 @@ set_property(TARGET cmime PROPERTY SOVERSION ${CMIME_SO_VERSION})
 
 install(TARGETS cmime
 	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 	PUBLIC_HEADER DESTINATION include
 	PRIVATE_HEADER DESTINATION include/cmime
 )
