@@ -167,6 +167,10 @@ int cmime_scanner_scan_buffer(CMimeMessage_T **message, char *buffer) {
     yyscan_t scanner;
     YY_BUFFER_STATE buf;
 
+    if (buffer == NULL)
+    {
+        return -1;
+    }
     if(yylex_init_extra(*message,&scanner)) { 
         fprintf(stderr, "error: no scanning today\n"); 
         return(-4); 
