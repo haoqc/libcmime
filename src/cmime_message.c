@@ -52,37 +52,58 @@ CMimeStringList_T *_get_boundaries(char *s) {
     size_t offset = 0;
 
     boundaries = cmime_string_list_new();
+    if (boundaries == NULL)
+    {
+        return NULL;
+    }
 
-    /* search for content-type headers, where new boundaries are defined */    
-    while ((it = strcasestr(s,"content-type:"))!=NULL) {
+    /* search for content-type headers, where new boundaries are defined */
+    while ((it = strcasestr(s, "content-type:")) != NULL)
+    {
         offset = strlen(s) - strlen(it);
 
         /* before the content-type header must not be any char except newline */
-        if ((s[offset-1]!=(unsigned char)10)&&(s[offset-1]!=(unsigned char)13))
+        if ((s[offset-1] != (unsigned char)10) && (s[offset-1] != (unsigned char)13))
+        {
             break;
+        }
 
         /* get all content-type header line(s) */
-        header = (char *)calloc(sizeof(char),sizeof(char));
-        while(*it != '\0') {
+        header = (char *)calloc(sizeof(char), sizeof(char));
+        if (header == NULL)
+        {
+            goto error;
+        }
+
+        while(*it != '\0')
+        {
             nxt = it;
             nxt++;
 
             /* break if char is a newline is not followed by a whitespace or tabulator */
             
             // we have a CR followed by a LF
-            if((*it==(unsigned char)13)&&(*nxt==(unsigned char)10)){
+            if(((*it) == (unsigned char)13) && ((*nxt) == (unsigned char)10))
+            {
                 nxt++;
 
-                if((*nxt!=(unsigned char)9)&&(*nxt!=(unsigned char)32))
+                if(((*nxt) != (unsigned char)9) && ((*nxt) != (unsigned char)32))
+                {
                     break;
+                }
             }  
             
-            if (((*it==(unsigned char)13)||(*it==(unsigned char)10)) &&((*nxt!=(unsigned char)9)&&(*nxt!=(unsigned char)32))) {
+            if ((((*it) == (unsigned char)13) || ((*it) == (unsigned char)10)) &&
+                (((*nxt) != (unsigned char)9) && ((*nxt) != (unsigned char)32)))
+            {
                 break;
             }
-            
 
             header = (char *)realloc(header,pos + 1 + sizeof(char));
+            if (header == NULL)
+            {
+                goto error;
+            }
             header[pos++] = *it;
             it++;
         }
@@ -91,24 +112,43 @@ CMimeStringList_T *_get_boundaries(char *s) {
 
         s = it;
         /* now search for boundary= in content-type header */
-        if ((it = strcasestr(header,"boundary="))!=NULL) { 
-            p = strstr(it,"=");
-            if (*++p=='"') 
+        if ((it = strcasestr(header, "boundary=")) != NULL)
+        { 
+            p = strstr(it, "=");
+            if (*++p == '"')
+            {
                 p++;
+            }
                     
             t = (char *)calloc(sizeof(char),sizeof(char));
-            /* if found, extract boundary and append to list */
-            while(*p != '\0') {
-                if ((*p=='"')||(*p==';')||(*p==(unsigned char)10)||(*p==(unsigned char)13))
-                    break;
+            if (t == NULL)
+            {
+                free(header);
+                header = NULL;
+                goto error;
+            }
 
-                t = (char *)realloc(t,pos + (2 * sizeof(char)));
+            /* if found, extract boundary and append to list */
+            while(*p != '\0')
+            {
+                if ((*p == '"') || ( *p ==';' ) || ( *p == (unsigned char)10) || ( *p == (unsigned char)13))
+                {
+                    break;
+                }
+
+                t = (char *)realloc(t, pos + (2 * sizeof(char)));
+                if (t == NULL)
+                {
+                    free(header);
+                    header = NULL;
+                    goto error;
+                }
                 t[pos++] = *p;
                 p++;
             }
             t[pos] = '\0';
             pos = 0;
-            cmime_string_list_insert(boundaries,t);
+            cmime_string_list_insert(boundaries, t);
             free(t);
         }
 
@@ -116,6 +156,15 @@ CMimeStringList_T *_get_boundaries(char *s) {
     }
     
     return(boundaries);
+
+error:
+    if (boundaries != NULL)
+    {
+        cmime_string_list_free(boundaries);
+        boundaries = NULL; 
+    }
+
+    return NULL;
 }
 
 /* re-add stripped bodies to message */
@@ -128,9 +177,10 @@ void _add_stripped_bodies(CMimeMessage_T **message, _StrippedData_T *sd) {
     /* now the wedding between CMimeMessage_T and stripped content */
     i = 0;
     elem = cmime_list_head((*message)->parts);
-    while(elem != NULL) {
+    while(elem != NULL)
+    {
         part = (CMimePart_T *)cmime_list_data(elem);
-        mime_body = cmime_string_list_get(sd->mime_bodies,i);
+        mime_body = cmime_string_list_get(sd->mime_bodies, i);
         part->content = mime_body;
         i++;
         elem = elem->next;
@@ -142,7 +192,7 @@ _StrippedData_T *_strip_message(CMimeMessage_T **msg, char *buffer, int header_o
     _StrippedData_T *sd = NULL;
     _BoundaryInfo_T *info = NULL;
     char *newline_char = NULL;
-    char *empty_line = NULL;
+    char empty_line[16];
     char *it = NULL;
     size_t offset;
     int count = 0;
@@ -152,51 +202,108 @@ _StrippedData_T *_strip_message(CMimeMessage_T **msg, char *buffer, int header_o
     char *mime_body = NULL;
     char *t = NULL;
     
-    sd = (_StrippedData_T *)calloc((size_t)1,sizeof(_StrippedData_T));
-    sd->stripped = NULL;
-
     /* search newline and build header-body seperator */
     newline_char = _cmime_internal_determine_linebreak(buffer);
     if (newline_char == NULL)
     {
-        return (sd);
+        return NULL;
     }
+
     (*msg)->linebreak = strdup(newline_char);
-    asprintf(&empty_line,"%s%s",newline_char,newline_char);
+    memset(empty_line, 0, sizeof(empty_line));
+    sprintf(empty_line, "%s%s", newline_char, newline_char);
 
-    cmime_string_list_free((*msg)->boundaries);
+    // get boundaries
+    if ((*msg)->boundaries != NULL)
+    {
+        cmime_string_list_free((*msg)->boundaries);
+    }
+
     (*msg)->boundaries = _get_boundaries(buffer);
-    if (cmime_string_list_get_count((*msg)->boundaries)!=0)
-        (*msg)->boundary = strdup(cmime_string_list_get((*msg)->boundaries, 0));
-    sd->mime_bodies = cmime_string_list_new();
+    if ((*msg)->boundaries == NULL)
+    {
+        return NULL;
+    }
 
-    if (header_only == 1) {
-        if((t = strstr(buffer,empty_line)) != NULL) {
-            offset = strlen(buffer) - strlen(t);    
-            sd->stripped = (char *)calloc(offset + sizeof(char),sizeof(char));
-            strncpy(sd->stripped,buffer,offset);
+    if (cmime_string_list_get_count((*msg)->boundaries) != 0)
+    {
+        (*msg)->boundary = strdup(cmime_string_list_get((*msg)->boundaries, 0));
+        if ((*msg)->boundary == NULL)
+        {
+            return NULL;
+        }
+    }
+
+    sd = (_StrippedData_T *)calloc((size_t)1,sizeof(_StrippedData_T));
+    if (sd == NULL)
+    {
+        return NULL;
+    }
+
+    sd->stripped = NULL;
+    sd->mime_bodies = cmime_string_list_new();
+    if (sd->mime_bodies == NULL)
+    {
+        free(sd);
+        sd = NULL;
+        return NULL;
+    }
+
+    if (header_only == 1)
+    {
+        if((t = strstr(buffer, empty_line)) != NULL)
+        {
+            offset = strlen(buffer) - strlen(t);
+            sd->stripped = (char *)calloc(offset + sizeof(char), sizeof(char));
+            if (sd->stripped == NULL)
+            {
+                goto error;
+            }
+
+            strncpy(sd->stripped, buffer, offset);
             sd->stripped[offset] = '\0';
-        } else
+        }
+        else
+        {
             sd->stripped = buffer;
-    } else {
-        if (cmime_string_list_get_count((*msg)->boundaries) > 0) {
-            sd->stripped = (char *)calloc(sizeof(char),sizeof(char));
+        }
+    } 
+    else 
+    {
+        if (cmime_string_list_get_count((*msg)->boundaries) > 0)
+        {
+            sd->stripped = (char *)calloc(sizeof(char), sizeof(char));
+            if (sd->stripped == NULL)
+            {
+                goto error;
+            }
+
             it = buffer;
-            while((it = strstr(it,"--"))!=NULL) {
-                info = _cmime_internal_get_boundary_info((*msg)->boundaries,it,newline_char);
-                if (info != NULL) {
+            while((it = strstr(it, "--")) != NULL)
+            {
+                info = _cmime_internal_get_boundary_info((*msg)->boundaries, it, newline_char);
+                if (info != NULL)
+                {
                     /* check existing mime body marker */
-                    if (mime_body_start != NULL) {
+                    if (mime_body_start != NULL)
+                    {
                         /* there is a start marker.... */
                         offset = strlen(mime_body_start) - strlen(it);
                         if (offset > 0) {
                             /* calculate offset to next boundary and copy body */
-                            mime_body = (char *)calloc(offset + sizeof(char),sizeof(char));
-                            strncpy(mime_body,mime_body_start,offset);
+                            mime_body = (char *)calloc(offset + sizeof(char), sizeof(char));
+                            if (mime_body == NULL)
+                            {
+                                goto error;
+                            }
+
+                            strncpy(mime_body, mime_body_start, offset);
                             mime_body[strlen(mime_body)] = '\0';
-                        } else {
+                        }
+                        else
+                        {
                             /* this part seems to be empty */
-                            mime_body = (char *)calloc(sizeof(char),sizeof(char));
+                            mime_body = (char *)calloc(sizeof(char), sizeof(char));
                             mime_body[0] = '\0';
                         }
                         cmime_string_list_insert(sd->mime_bodies, mime_body);
@@ -207,10 +314,18 @@ _StrippedData_T *_strip_message(CMimeMessage_T **msg, char *buffer, int header_o
                     }
 
                     // check if it's a closing boundary
-                    if (info->type == CMIME_BOUNDARY_CLOSE) {
-                        nxt = strstr(it,newline_char);
-                        if ((nxt = strstr(nxt,"--"))!=NULL) {
-                            if ((nxt_info = _cmime_internal_get_boundary_info((*msg)->boundaries,nxt,newline_char))!=NULL) {  
+                    if (info->type == CMIME_BOUNDARY_CLOSE)
+                    {
+                        nxt = strstr(it, newline_char);
+                        if (nxt == NULL)
+                        {
+                            goto error;
+                        }
+
+                        if ((nxt = strstr(nxt, "--")) != NULL)
+                        {
+                            if ((nxt_info = _cmime_internal_get_boundary_info((*msg)->boundaries, nxt, newline_char)) != NULL)
+                            {  
                                 /* we've found another boundary, so it's not the last part. 
                                  * Offset is the difference between previous found boundary and new one */
                                 offset = strlen(it) - strlen(nxt); 
@@ -221,34 +336,54 @@ _StrippedData_T *_strip_message(CMimeMessage_T **msg, char *buffer, int header_o
                         }
 
                         if (offset == -1)
+                        {
                             /* since _match_boundary has not found another part behind,
                              * this seems to be the end...my best friend.
                              * Offset is the difference between previous found boundary and file end */
-                            offset = strlen(it);                           
-                    } else {
-                        if (count == 0) {
+                            offset = strlen(it);
+                        }
+                    }
+                    else
+                    {
+                        if (count == 0)
+                        {
                             /* this is the first run, so we have to copy the message
                              * headers first */
-                            offset = strlen(buffer) - strlen(it);    
-                            sd->stripped = (char *)realloc(sd->stripped,strlen(sd->stripped) + offset + sizeof(char));
-                            strncat(sd->stripped,buffer,offset);
+                            offset = strlen(buffer) - strlen(it);
+                            sd->stripped = (char *)realloc(sd->stripped, strlen(sd->stripped) + offset + sizeof(char));
+                            if (sd->stripped == NULL)
+                            {
+                                goto error;
+                            }
+                            strncat(sd->stripped, buffer, offset);
                             offset = -1;
                             
                             count++;
                         }
 
                         /* calculate offset for mime part headers */
-                        t = strstr(it,empty_line);
+                        t = strstr(it, empty_line);
+                        if (t == NULL)
+                        {
+                            goto error;
+                        }
                         t = t + strlen(empty_line);
                         offset = strlen(it) - strlen(t);
                         if (offset > 0)
+                        {
                             /* Now it's time to grap the mime part body.
                              * Set a marker where the mime part content begins*/
                             mime_body_start = t;
+                        }
                     }
                     
-                    if (offset != -1) {
+                    if (offset != -1)
+                    {
                         sd->stripped = (char *)realloc(sd->stripped,strlen(sd->stripped) + offset + sizeof(char));
+                        if (sd->stripped == NULL)
+                        {
+                            goto error;
+                        }
                         strncat(sd->stripped,it,offset);
                         offset = -1;
                     }
@@ -259,13 +394,42 @@ _StrippedData_T *_strip_message(CMimeMessage_T **msg, char *buffer, int header_o
                 }
                 it++;
             }
-        } else {
+        }
+        else 
+        {
             sd->stripped = buffer;
         }
     }
-    free(empty_line);
+    
+    return (sd);
 
-    return(sd);
+error:
+    if (info != NULL)
+    {
+        free(info->marker);
+        free(info);
+        info = NULL;
+    }
+
+    if (sd != NULL)
+    {
+        if (sd->mime_bodies != NULL)
+        {
+            cmime_string_list_free(sd->mime_bodies);
+            sd->mime_bodies = NULL;
+        }
+
+        if (sd->stripped != buffer)
+        {
+            free(sd->stripped);
+            sd->stripped = NULL;
+        }
+
+        free(sd);
+        sd = NULL;
+    }
+
+    return NULL;
 }
 
 void _recipients_destroy(void *data) {
@@ -403,52 +567,101 @@ CMimeMessage_T *cmime_message_new(void) {
     CMimeMessage_T *message = NULL;
     
     message = (CMimeMessage_T *)calloc((size_t)1, sizeof(CMimeMessage_T));
+    if (message == NULL)
+    {
+        return NULL;
+    }
 
-    if (cmime_list_new(&message->headers,_cmime_internal_header_destroy)!=0) {
-        free(message);
-        return(NULL);
+    if (cmime_list_new(&message->headers,_cmime_internal_header_destroy) != 0) {
+        goto error;
     }
     
-    message->sender = NULL;
     if (cmime_list_new(&message->recipients,_recipients_destroy)!=0) {
-        free(message);
-        return(NULL);
+        goto error;
     }
 
+    if (cmime_list_new(&message->parts, _cmime_internal_parts_destroy) != 0)  {
+        goto error;
+    }
+
+    if ((message->boundaries = cmime_string_list_new()) == NULL) {
+        goto error;    
+    }
+
+    message->sender = NULL;
     message->boundary = NULL;
     message->gap = NULL;
     message->linebreak = NULL;
 
-    if (cmime_list_new(&message->parts,_cmime_internal_parts_destroy)!=0)  {
-        free(message);
-        return(NULL);
+error:
+
+    if (message->headers != NULL)
+    {
+        cmime_list_free(message->headers);
+        message->headers = NULL;
     }
 
+    if (message->recipients != NULL)
+    {
+        cmime_list_free(message->recipients);
+        message->recipients = NULL;
+    }
 
-    message->boundaries = cmime_string_list_new();
-    return(message);
+    if (message->parts != NULL)
+    {
+        cmime_list_free(message->parts);
+        message->parts = NULL;
+    }
+
+    free(message);
+    message = NULL;
+
+    return NULL;
 }
 
 /** Free a CMimeMessage_T object  */
 void cmime_message_free(CMimeMessage_T *message) {
     assert(message);
 
-    cmime_address_free(message->sender);    
-    cmime_list_free(message->recipients);
+    if (message->sender != NULL)
+    {
+        cmime_address_free(message->sender);    
+    }
 
-    cmime_list_free(message->headers);
-    
+    if (message->recipients != NULL)
+    {
+        cmime_list_free(message->recipients);
+    }
+
+    if (message->headers != NULL)
+    {
+        cmime_list_free(message->headers);
+    }
+
+    if (message->parts != NULL)
+    {
+        cmime_list_free(message->parts);
+    }
+
+    if (message->boundaries != NULL)
+    {
+        cmime_string_list_free(message->boundaries);
+    }
+
     if (message->boundary!=NULL)
+    {
         free(message->boundary);
-    
+    }
+
     if (message->gap!=NULL)
+    {
         free(message->gap);
-    
+    }
+
     if (message->linebreak!=NULL)
+    {
         free(message->linebreak);
-    
-    cmime_list_free(message->parts);
-    cmime_string_list_free(message->boundaries);
+    }
 
     free(message);
 }
@@ -990,10 +1203,16 @@ int cmime_message_from_string(CMimeMessage_T **message, const char *content, int
     assert((header_only == 0)||(header_only == 1));
   
     p = strdup(content);
+    if (p == NULL)
+    {
+        return -1;
+    }
+
     sd = _strip_message(message,p,header_only);
     if (sd == NULL)
     {
         free(p);
+        p = NULL;
         return (-1);
     }
     
@@ -1011,7 +1230,7 @@ int cmime_message_from_string(CMimeMessage_T **message, const char *content, int
     ret = cmime_scanner_scan_buffer(message, sd->stripped);
 
     if (sd->stripped != p) {
-        _add_stripped_bodies(message,sd);    
+        _add_stripped_bodies(message, sd);    
     }
 
     free(sd->mime_bodies->node);

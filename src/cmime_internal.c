@@ -167,18 +167,22 @@ _BoundaryInfo_T *_cmime_internal_get_boundary_info(CMimeStringList_T *boundaries
     char *bound;
     size_t offset;
 
-    if (newline != NULL) {
-        t = strstr(s,newline);
-        if (t!=NULL) {
+    if (newline != NULL)
+    {
+        t = strstr(s, newline);
+        if (t != NULL)
+        {
             offset = strlen(s) - strlen(t);
-            t = (char *)calloc(offset + sizeof(char),sizeof(char));
-            strncpy(t,s,offset);
+            t = (char *)calloc(offset + sizeof(char), sizeof(char));
+            strncpy(t, s, offset);
             t[strlen(t)] = '\0';
-            for(i=0; i < cmime_string_list_get_count(boundaries); i++) {    
-                bound = cmime_string_list_get(boundaries,i);
-                asprintf(&marker,"--%s--",bound);
-                if (strcmp(t,marker)==0) {
-                    info = (_BoundaryInfo_T *)calloc((size_t)1,sizeof(_BoundaryInfo_T));
+            for(i=0; i < cmime_string_list_get_count(boundaries); i++)
+            {    
+                bound = cmime_string_list_get(boundaries, i);
+                asprintf(&marker, "--%s--", bound);
+                if (strcmp(t, marker) == 0)
+                {
+                    info = (_BoundaryInfo_T *)calloc((size_t)1, sizeof(_BoundaryInfo_T));
                     info->marker = strdup(marker);
                     info->type = CMIME_BOUNDARY_CLOSE;
                     info->len = strlen(marker);
@@ -186,9 +190,9 @@ _BoundaryInfo_T *_cmime_internal_get_boundary_info(CMimeStringList_T *boundaries
                     break;
                 } else {
                     free(marker);
-                    asprintf(&marker,"--%s",bound);
-                    if (strcmp(t,marker)==0) {
-                        info = (_BoundaryInfo_T *)calloc((size_t)1,sizeof(_BoundaryInfo_T));
+                    asprintf(&marker, "--%s", bound);
+                    if (strcmp(t, marker) == 0) {
+                        info = (_BoundaryInfo_T *)calloc((size_t)1, sizeof(_BoundaryInfo_T));
                         info->marker = strdup(marker);
                         info->type = CMIME_BOUNDARY_OPEN;
                         info->len = strlen(marker);

@@ -31,6 +31,10 @@
 CMimeStringList_T *cmime_string_list_new(void) {
     CMimeStringList_T *sl;
     sl = (CMimeStringList_T *)calloc((size_t)1,sizeof(CMimeStringList_T));
+    if (sl == NULL)
+    {
+        return NULL;
+    }
     sl->count = 0;
     sl->node = NULL;
     return(sl);
