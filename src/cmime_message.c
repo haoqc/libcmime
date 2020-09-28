@@ -593,6 +593,8 @@ CMimeMessage_T *cmime_message_new(void) {
     message->gap = NULL;
     message->linebreak = NULL;
 
+    return message;
+
 error:
 
     if (message->headers != NULL)
